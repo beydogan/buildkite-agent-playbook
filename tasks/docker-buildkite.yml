@@ -1,0 +1,45 @@
+---
+  # Integration between docker and builtkite agent for fixing volume permission issues.
+- name: Get uid of buildkite agent
+  command: id buildkite-agent -u
+  register: agent_uid
+
+- name: Get docker group id
+  command: "bash -c 'getent group docker | cut -d: -f3'"
+  register: docker_gid
+
+- name: Ensure Docker user namespace is defined in subuid
+  blockinfile:
+    path: "/etc/subuid"
+    insertafter: EOF
+    content: |
+      buildkite-agent:{{agent_uid.stdout}}:1
+      buildkite-agent:500000:65536
+  when: agent_uid.rc == 0
+
+- name: Ensure Docker user namespace is defined in subgid
+  blockinfile:
+    path: "/etc/subgid"
+    insertafter: EOF
+    content: |
+      buildkite-agent:{{docker_gid.stdout}}:1
+      buildkite-agent:500000:65536
+  when: docker_gid.rc == 0
+
+- name: Ensure Docker user namespace is defined in subuid
+  lineinfile:
+    path: "{{ item }}"
+    regexp: '^buildkite-agent'
+    line: 'buildkite-agent:500000:65536'
+  with_items:
+    - /etc/subuid
+    - /etc/subgid
+#
+- name: Adding buildkite-agent to docker group
+  user: name=buildkite-agent
+        groups=docker
+        append=yes
+  notify:
+    - Restart docker
+    - Restart main buildkite agent
+    - Restart clone buildkite agents

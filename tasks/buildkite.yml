@@ -1,0 +1,89 @@
+---
+- name: Install dependencies
+  apt:
+    name: "{{ item }}"
+    state: "present"
+    install_recommends: False
+  with_items:
+    - "apt-transport-https"
+
+- name: Get upstream APT GPG key
+  become: yes
+  become_user: root
+  apt_key:
+    id: 32A37959C2FA5C3C99EFBC32A79206696452D198
+    keyserver: keyserver.ubuntu.com
+    state: "present"
+
+- name: Configure upstream APT repository
+  become: yes
+  become_user: root
+  apt_repository:
+    repo: "deb https://apt.buildkite.com/buildkite-agent experimental main"
+    state: "present"
+    update_cache: True
+
+- name: Install Buildkite Agent
+  become: yes
+  become_user: root
+  apt:
+    name: "buildkite-agent"
+    state: "present"
+    update_cache: True
+
+- service: name=buildkite-agent state=started
+  become: yes
+  become_user: root
+
+- name: Set agent token
+  become: yes
+  become_user: root
+  lineinfile:
+    path=/etc/buildkite-agent/buildkite-agent.cfg
+    regexp="^token="
+    line="token=\"{{buildkite_agent_token}}\""
+    backrefs=yes
+    state=present
+
+- name: Create .ssh folder in buildkite-agents home dir
+  become: yes
+  become_user: root
+  file:
+    path: /var/lib/buildkite-agent/.ssh
+    owner: buildkite-agent
+    group: buildkite-agent
+    state: directory
+
+- name: Upload buildkite-agent user's private keys
+  become: yes
+  become_user: root
+  copy:
+    src: ssh-keys/id_rsa
+    dest: "/var/lib/buildkite-agent/.ssh/id_rsa"
+    mode: 0600
+    owner: buildkite-agent
+    group: buildkite-agent
+
+- name: Create a systemd template
+  become: yes
+  become_user: root
+  copy:
+    remote_src: true
+    src: /lib/systemd/system/buildkite-agent.service
+    dest: /etc/systemd/system/buildkite-agent@.service
+
+- name: Create other agents
+  become: yes
+  become_user: root
+  systemd:
+    name: buildkite-agent@{{item}}
+    enabled: yes
+  with_sequence: start=1 end={{buildkite_agent_count}}
+
+- name: Start other agents
+  become: yes
+  become_user: root
+  systemd:
+    name: buildkite-agent@{{item}}
+    state: started
+  with_sequence: start=1 end={{buildkite_agent_count}}

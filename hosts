@@ -1,0 +1,5 @@
+[ci-servers]
+0.0.0.0
+
+[ci-servers:vars]
+ansible_python_interpreter=/usr/bin/python3

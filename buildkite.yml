@@ -1,0 +1,32 @@
+---
+- name: Setup server for buildkite agents
+  hosts: all
+  remote_user: CHANGEME
+  become: true
+  become_user: root
+
+  vars:
+    # Buildkite
+    buildkite_agent_token: CHANGEME
+    buildkite_agent_count: 3
+
+    # docker
+    docker_apt_release_channel: stable
+    docker_apt_repository: "deb https://download.docker.com/linux/{{ ansible_distribution|lower }} {{ ansible_distribution_release }} {{ docker_apt_release_channel }}"
+    docker_compose_version: "1.19.0-rc3"
+    docker_compose_path: /usr/local/bin/docker-compose
+    docker_package: "docker-ce"
+    docker_package_state: present
+
+  handlers:
+  - import_tasks: handlers/main.yml
+
+  tasks:
+  - import_tasks: tasks/docker.yml
+  - import_tasks: tasks/buildkite.yml
+  - import_tasks: tasks/docker-buildkite.yml
+  -  debug: msg="trigger agents restart"
+     notify:
+       - Restart main buildkite agent
+       - Restart clone buildkite agents
+     changed_when: true
